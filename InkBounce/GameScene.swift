@@ -9,13 +9,19 @@
 import SpriteKit
 import GameplayKit
 
-class GameScene: SKScene {
+class GameScene: SKScene, SKPhysicsContactDelegate {
     
     var entities = [GKEntity]()
     var graphs = [String : GKGraph]()
     
     private var lastUpdateTime : TimeInterval = 0
     
+    let BallCategory   : UInt32 = 0x1 << 0
+    let BottomCategory : UInt32 = 0x1 << 1
+    let BlockCategory  : UInt32 = 0x1 << 2
+    let PaddleCategory : UInt32 = 0x1 << 3
+    let BorderCategory : UInt32 = 0x1 << 4
+
     
     //Create Global Variables
     var score = 0
@@ -25,6 +31,7 @@ class GameScene: SKScene {
     var ref = CGMutablePath()
     let bottom = SKShapeNode()
     var wayPoints: [CGPoint] = []
+    let shapeNode = SKShapeNode()
 
     var gameOver = false
     
@@ -37,18 +44,21 @@ class GameScene: SKScene {
     
     func initHud(){
         //set Scene Color
-        
+        physicsWorld.contactDelegate = self
+
         //let shape = SKShapeNode()
+        /*
         let path = CGMutablePath()
         path.move(to: CGPoint(x: frame.minX, y: frame.minY))
         path.addLine(to: CGPoint(x: frame.maxX, y: frame.minY + 10))
+        
         
         bottom.path = path
         bottom.strokeColor = SKColor .clear
         bottom.lineWidth = 2
         bottom.removeFromParent()
         addChild(bottom)
-        
+        */
        /* shape.position = CGPoint(x: frame.midX, y: frame.midY)
         shape.fillColor = SKColor .blue
         shape.strokeColor = SKColor .blue
@@ -62,7 +72,7 @@ class GameScene: SKScene {
        
         
         
-        physicsWorld.gravity = CGVector(dx: 0.0, dy: -1.5)
+       // physicsWorld.gravity = CGVector(dx: 0.0, dy: -1.5)
 
         
         scoreLabel.fontName = "Helvetica Neue Bold"
@@ -82,6 +92,28 @@ class GameScene: SKScene {
         
     }
     
+    
+    func didBegin(_ contact: SKPhysicsContact) {
+        // 1
+        var firstBody: SKPhysicsBody
+        var secondBody: SKPhysicsBody
+        // 2
+        if contact.bodyA.categoryBitMask < contact.bodyB.categoryBitMask {
+            firstBody = contact.bodyA
+            secondBody = contact.bodyB
+        } else {
+            firstBody = contact.bodyB
+            secondBody = contact.bodyA
+        }
+        // 3
+        if firstBody.categoryBitMask == BallCategory && secondBody.categoryBitMask == BottomCategory {
+            GameOver()
+        }
+        
+        
+        
+    }
+    
     func randomInRange(lo: Int, hi : Int) -> Int {
         return lo + Int(arc4random_uniform(UInt32(hi - lo + 1)))
     }
@@ -96,14 +128,15 @@ class GameScene: SKScene {
         let randomPoint = CGPoint(x: randomX, y: randomY)
         
         
-        Ball.name = "Ball"
+        Ball.name = "ball"
         Ball.fillColor = SKColor(red: 143, green: 255, blue: 250, alpha: 1)
         Ball.strokeColor = SKColor(red: 143, green: 255, blue: 250, alpha: 1)
         Ball.physicsBody = SKPhysicsBody(circleOfRadius: 30)
         Ball.position = randomPoint
         Ball.physicsBody?.isDynamic = true
-        Ball.physicsBody?.affectedByGravity = true
         
+        Ball.physicsBody?.applyImpulse(CGVector(dx: 0.0, dy: -2.3))
+
         Ball.removeFromParent()
         self.addChild(Ball)
         
@@ -116,14 +149,17 @@ class GameScene: SKScene {
         self.lastUpdateTime = 0
 
         
-        initHud()
     }
     
     
     
     override func didMove(to view: SKView) {
         //scene bounderies
-
+        let bottomRect = CGRect(x: frame.origin.x, y: frame.origin.y, width: frame.size.width, height: 1)
+        let bottom = SKNode()
+        bottom.physicsBody = SKPhysicsBody(edgeLoopFrom: bottomRect)
+        addChild(bottom)
+        initHud()
         // 1
         let borderBody = SKPhysicsBody(edgeLoopFrom: self.frame)
         // 2
@@ -131,6 +167,14 @@ class GameScene: SKScene {
         // 3
         self.physicsBody = borderBody
         
+        bottom.physicsBody!.categoryBitMask = BottomCategory
+        Ball.physicsBody!.categoryBitMask = BallCategory
+        borderBody.categoryBitMask = BorderCategory
+        shapeNode.physicsBody?.categoryBitMask = PaddleCategory
+
+     
+        Ball.physicsBody!.contactTestBitMask = BottomCategory
+
         
     }
 
@@ -235,11 +279,20 @@ class GameScene: SKScene {
         scoreLabel.text = score.description
         
         
-        if Ball.intersects(bottom) {
+       /* if Ball.intersects(bottom) {
             GameOver()
         }
-       
-       
+       */
+        
+        if Ball.intersects(shapeNode){
+        
+            print("Line Bounce Touch")
+            //apply impulse here...
+            
+
+        
+        }
+        
         // Called before each frame is rendered
         
         // Initialize _lastUpdateTime if it has not already been
@@ -259,7 +312,8 @@ class GameScene: SKScene {
         
         drawLines()
         
-    }
+        
+           }
  
     
     
@@ -272,7 +326,7 @@ class GameScene: SKScene {
             return nil
         }
         //2
-        var ref = CGMutablePath()
+        let ref = CGMutablePath()
         
         //3
         for i in 0 ..< wayPoints.count {
@@ -295,21 +349,24 @@ class GameScene: SKScene {
     
     func drawLines() {
         //1
-        enumerateChildNodes(withName: "line", using: {node, stop in
+        enumerateChildNodes(withName: "paddle", using: {node, stop in
             node.removeFromParent()
         })
         
         //2
             //3
             if let path = self.createPathToMove() {
-                let shapeNode = SKShapeNode()
                 shapeNode.path = path
-                shapeNode.name = "line"
+                shapeNode.name = "paddle"
                 shapeNode.strokeColor = SKColor .black
-                shapeNode.lineWidth = 5
+                shapeNode.lineWidth = 10
                 shapeNode.zPosition = 1
-                
+                shapeNode.name = "paddle"
+                shapeNode.physicsBody = SKPhysicsBody(edgeLoopFrom: shapeNode.frame)
+                shapeNode.removeFromParent()
                 self.addChild(shapeNode)
+                
+
             }
         
     }
